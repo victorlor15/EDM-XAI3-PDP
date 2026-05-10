@@ -1,0 +1,293 @@
+---
+title: "Partial Dependence Plots: Bike Rentals and House Prices"
+subtitle: "Exercise 5 - XAI: Partial Dependence Plots"
+author: "Victor Lorenzo Lopez, Marc Gomez Cidad, Pablo Alpuente Tabasco"
+date: "May 2026"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+    reference_docx: NULL
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE,
+                      fig.width = 9, fig.height = 5.5, dpi = 150)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(ranger)
+library(pdp)
+```
+
+---
+
+# Executive Summary
+
+This report applies Partial Dependence Plots (PDP) to two real-world prediction tasks: daily bike rental counts and house sale prices. In Exercise 1, a random forest is fitted on the Capital Bike Sharing daily dataset using the same feature engineering established in prior practices, and one-dimensional PDPs are computed for four key variables to examine their marginal effects on predicted demand. In Exercise 2, a two-dimensional PDP of temperature against humidity reveals the joint influence of these two weather conditions. In Exercise 3, the approach is extended to the King County house sales dataset, where a random forest is trained on a random subsample and PDPs are used to quantify how structural property features drive the predicted price.
+
+---
+
+# 1. One-Dimensional Partial Dependence Plots - Bike Rentals
+
+## 1.1 Data Preparation and Model
+
+```{r bike-prep, include=FALSE}
+day <- read.csv("day.csv")
+
+day$MISTY <- as.integer(day$weathersit == 2)
+day$RAIN  <- as.integer(day$weathersit %in% c(3, 4))
+day$temp      <- day$temp      * 41
+day$hum       <- day$hum       * 100
+day$windspeed <- day$windspeed * 67
+day$days_since_2011 <- as.integer(as.Date(day$dteday) - as.Date("2011-01-01"))
+day$season_SPRING <- as.integer(day$season == 2)
+day$season_SUMMER <- as.integer(day$season == 3)
+day$season_FALL   <- as.integer(day$season == 4)
+
+features_bike <- c("workingday", "holiday",
+                   "season_SPRING", "season_SUMMER", "season_FALL",
+                   "MISTY", "RAIN", "temp", "hum", "windspeed",
+                   "days_since_2011", "yr", "mnth", "weekday")
+
+bike_data <- day[, c("cnt", features_bike)]
+
+set.seed(42)
+rf_bike <- ranger(cnt ~ ., data = bike_data, num.trees = 500,
+                  importance = "impurity", seed = 42)
+```
+
+The Capital Bike Sharing dataset contains 731 daily records from 2011 to 2012. The same feature engineering pipeline used in previous practices is applied: binary weather flags (MISTY, RAIN), denormalised temperature (x41, in degrees Celsius), humidity (x100, in %), and wind speed (x67, in km/h), plus days_since_2011 and seasonal dummies. A random forest with 500 trees is fitted to predict daily total rentals (cnt).
+
+## 1.2 PDP: days_since_2011
+
+```{r pdp-days, cache=TRUE, fig.cap="Figure 1. Partial dependence of predicted bike rentals on days elapsed since 2011-01-01. The rug marks show the distribution of observed values."}
+pd_days <- partial(rf_bike, pred.var = "days_since_2011",
+                   train = bike_data, progress = FALSE)
+
+ggplot(pd_days, aes(x = days_since_2011, y = yhat)) +
+  geom_line(colour = "#2c7bb6", linewidth = 1) +
+  geom_rug(data = bike_data, aes(x = days_since_2011),
+           sides = "b", alpha = 0.3, inherit.aes = FALSE) +
+  labs(title = "PDP: days_since_2011 vs Predicted Bike Rentals",
+       x = "Days since 2011-01-01",
+       y = "Predicted rental count") +
+  theme_bw(base_size = 12)
+```
+
+## 1.3 PDP: Temperature
+
+```{r pdp-temp, cache=TRUE, fig.cap="Figure 2. Partial dependence of predicted bike rentals on temperature (in degrees Celsius)."}
+pd_temp <- partial(rf_bike, pred.var = "temp",
+                   train = bike_data, progress = FALSE)
+
+ggplot(pd_temp, aes(x = temp, y = yhat)) +
+  geom_line(colour = "#d7191c", linewidth = 1) +
+  geom_rug(data = bike_data, aes(x = temp),
+           sides = "b", alpha = 0.3, inherit.aes = FALSE) +
+  labs(title = "PDP: Temperature vs Predicted Bike Rentals",
+       x = "Temperature (degrees C)",
+       y = "Predicted rental count") +
+  theme_bw(base_size = 12)
+```
+
+## 1.4 PDP: Humidity
+
+```{r pdp-hum, cache=TRUE, fig.cap="Figure 3. Partial dependence of predicted bike rentals on relative humidity (%)."}
+pd_hum <- partial(rf_bike, pred.var = "hum",
+                  train = bike_data, progress = FALSE)
+
+ggplot(pd_hum, aes(x = hum, y = yhat)) +
+  geom_line(colour = "#1a9641", linewidth = 1) +
+  geom_rug(data = bike_data, aes(x = hum),
+           sides = "b", alpha = 0.3, inherit.aes = FALSE) +
+  labs(title = "PDP: Humidity vs Predicted Bike Rentals",
+       x = "Humidity (%)",
+       y = "Predicted rental count") +
+  theme_bw(base_size = 12)
+```
+
+## 1.5 PDP: Wind Speed
+
+```{r pdp-wind, cache=TRUE, fig.cap="Figure 4. Partial dependence of predicted bike rentals on wind speed (km/h)."}
+pd_wind <- partial(rf_bike, pred.var = "windspeed",
+                   train = bike_data, progress = FALSE)
+
+ggplot(pd_wind, aes(x = windspeed, y = yhat)) +
+  geom_line(colour = "#7b2d8b", linewidth = 1) +
+  geom_rug(data = bike_data, aes(x = windspeed),
+           sides = "b", alpha = 0.3, inherit.aes = FALSE) +
+  labs(title = "PDP: Wind Speed vs Predicted Bike Rentals",
+       x = "Wind speed (km/h)",
+       y = "Predicted rental count") +
+  theme_bw(base_size = 12)
+```
+
+## 1.6 Interpretation
+
+**QUESTION: Analyse the influence of days_since_2011, temperature, humidity and wind speed on the predicted bike counts.**
+
+**days_since_2011:** The PDP shows a clear positive trend across the observation period. In the first 200 days (roughly the first half of 2011), predicted rentals grow gradually as the system gained users. Between days 200 and 400, there is a pronounced jump corresponding to the warmer months of 2011, but the underlying time trend accelerates. After day 365 (start of 2012), the model predicts substantially higher baseline rentals, reflecting the combination of system growth and a maturing user base. The relationship is non-linear: growth is fastest in the middle of the study period and levels off toward the end of 2012. This confirms the strong temporal trend identified in previous practices.
+
+**Temperature:** The PDP reveals a non-linear, largely monotone increase in predicted rentals as temperature rises. At very low temperatures (below 5 degrees C), predicted counts are around 2,000-2,500 bikes per day. As temperature climbs from 5 to 20 degrees C, predicted rentals rise sharply by roughly 2,000-3,000 units. Above 20-25 degrees C, the curve continues to rise but at a slower rate, eventually plateauing or showing a slight downturn at extreme heat (above 32 degrees C), where discomfort reduces demand. This non-linear response is well-suited to a random forest, which can capture the plateau at high temperatures that a linear model would miss.
+
+**Humidity:** The PDP shows a predominantly negative relationship between humidity and predicted rentals. At low humidity (30-50%), predicted counts are highest. As humidity increases beyond 60-70%, predicted rentals decline noticeably. Very high humidity (above 80%) is associated with approximately 500-1,000 fewer predicted rentals per day compared to dry conditions. This effect is consistent with the observation that high humidity correlates with precipitation risk and makes physical activity less pleasant. The decline is gradual at moderate humidity and steeper at the high end.
+
+**Wind speed:** Wind speed shows a clear negative marginal effect. Predicted rentals are highest when wind speed is below 15 km/h. As wind increases from 15 to 30 km/h, the model predicts a steady decline of roughly 500-1,000 bikes. At very high wind speeds (above 35 km/h), predicted counts continue to fall. Strong winds increase the physical effort of cycling and raise safety concerns, particularly on exposed urban roads. The effect is consistent in direction throughout the range, though the steepest decline occurs in the 15-30 km/h interval where conditions go from comfortable to clearly difficult.
+
+---
+
+# 2. Two-Dimensional PDP - Bike Rentals
+
+## 2.1 2D PDP: Temperature vs Humidity
+
+```{r pdp-2d, cache=TRUE, fig.cap="Figure 5. Two-dimensional PDP for temperature and humidity. The colour scale shows predicted daily bike rentals. Rug marks on both axes display the distribution of observed training values."}
+set.seed(42)
+bike_sample <- bike_data[sample(nrow(bike_data), min(500, nrow(bike_data))), ]
+
+pd_2d <- partial(rf_bike, pred.var = c("temp", "hum"),
+                 train = bike_sample, progress = FALSE, chull = TRUE)
+
+temp_vals <- sort(unique(pd_2d$temp))
+hum_vals  <- sort(unique(pd_2d$hum))
+tile_h <- if (length(temp_vals) > 1) median(diff(temp_vals)) * 1.1 else 2
+tile_w <- if (length(hum_vals)  > 1) median(diff(hum_vals))  * 1.1 else 4
+
+ggplot(pd_2d, aes(x = hum, y = temp, fill = yhat)) +
+  geom_tile(width = tile_w, height = tile_h) +
+  geom_rug(data = bike_sample,
+           aes(x = hum, y = temp),
+           alpha = 0.25, inherit.aes = FALSE, sides = "bl") +
+  scale_fill_viridis_c(option = "plasma",
+                       name = "Predicted\nrentals") +
+  labs(title = "2D PDP: Temperature x Humidity - Predicted Bike Rentals",
+       x = "Humidity (%)",
+       y = "Temperature (degrees C)") +
+  theme_bw(base_size = 12)
+```
+
+## 2.2 Interpretation
+
+**QUESTION: Interpret the results of the 2D PDP.**
+
+The two-dimensional PDP reveals how the joint combination of temperature and humidity influences predicted rental counts, uncovering an interaction that the individual one-dimensional PDPs cannot capture.
+
+The highest predicted rentals (bright yellow-orange regions) appear in the upper-left area of the plot, corresponding to high temperatures combined with low-to-moderate humidity (roughly 15-30 degrees C and 40-65% humidity). This is the most comfortable cycling zone: warm enough to favour outdoor activity, but not so humid as to make it unpleasant.
+
+Moving to the lower-left quadrant (low temperature, low humidity), predicted rentals drop substantially. Cold conditions discourage cycling regardless of how dry the air is. Moving horizontally to the right (increasing humidity at any fixed temperature), predicted counts decline, confirming the negative main effect of humidity seen in Figure 3.
+
+The most interesting region is the upper-right corner (high temperature, high humidity), where predicted rentals are lower than for the same temperature at moderate humidity. This demonstrates a genuine interaction: extreme heat and high humidity together are more discouraging than either factor alone. Hot, muggy days are subjectively more uncomfortable than hot, dry days, and this is captured by the model.
+
+The bottom-right area (low temperature, high humidity) shows the lowest predicted rentals, representing cold and damp winter days where virtually no discretionary cycling occurs.
+
+The rug marks on both axes confirm that most training observations cluster around moderate temperature (10-25 degrees C) and moderate humidity (50-80%), which is where the model has the most data and therefore the most reliable PDP estimates.
+
+---
+
+# 3. Partial Dependence Plots - House Price Prediction
+
+## 3.1 Data Preparation and Model
+
+```{r house-prep, include=FALSE}
+kc <- read.csv("kc_house_data.csv")
+
+set.seed(42)
+kc_sample <- kc[sample(nrow(kc), 1000), ]
+
+house_features <- c("bedrooms", "bathrooms", "sqft_living",
+                    "sqft_lot", "floors", "yr_built")
+house_data <- kc_sample[, c("price", house_features)]
+
+rf_house <- ranger(price ~ ., data = house_data,
+                   num.trees = 500, importance = "impurity", seed = 42)
+```
+
+The King County house sales dataset contains `r nrow(kc)` records. Due to the computational cost of PDP generation at this scale, a random sample of 1,000 observations is drawn (with `set.seed(42)`) before fitting the random forest. The model predicts sale price from six structural features: bedrooms, bathrooms, sqft_living, sqft_lot, floors, and yr_built.
+
+## 3.2 PDP: Bedrooms
+
+```{r house-pdp-bed, cache=TRUE, fig.cap="Figure 6. Partial dependence of predicted house price on the number of bedrooms."}
+pd_bed <- partial(rf_house, pred.var = "bedrooms",
+                  train = house_data, progress = FALSE)
+
+ggplot(pd_bed, aes(x = bedrooms, y = yhat)) +
+  geom_line(colour = "#2c7bb6", linewidth = 1) +
+  geom_rug(data = house_data, aes(x = bedrooms),
+           sides = "b", alpha = 0.4, inherit.aes = FALSE) +
+  labs(title = "PDP: Bedrooms vs Predicted House Price",
+       x = "Number of bedrooms",
+       y = "Predicted price (USD)") +
+  theme_bw(base_size = 12)
+```
+
+## 3.3 PDP: Bathrooms
+
+```{r house-pdp-bath, cache=TRUE, fig.cap="Figure 7. Partial dependence of predicted house price on the number of bathrooms."}
+pd_bath <- partial(rf_house, pred.var = "bathrooms",
+                   train = house_data, progress = FALSE)
+
+ggplot(pd_bath, aes(x = bathrooms, y = yhat)) +
+  geom_line(colour = "#d7191c", linewidth = 1) +
+  geom_rug(data = house_data, aes(x = bathrooms),
+           sides = "b", alpha = 0.4, inherit.aes = FALSE) +
+  labs(title = "PDP: Bathrooms vs Predicted House Price",
+       x = "Number of bathrooms",
+       y = "Predicted price (USD)") +
+  theme_bw(base_size = 12)
+```
+
+## 3.4 PDP: sqft_living
+
+```{r house-pdp-sqft, cache=TRUE, fig.cap="Figure 8. Partial dependence of predicted house price on interior living area (square feet)."}
+pd_sqft <- partial(rf_house, pred.var = "sqft_living",
+                   train = house_data, progress = FALSE)
+
+ggplot(pd_sqft, aes(x = sqft_living, y = yhat)) +
+  geom_line(colour = "#1a9641", linewidth = 1) +
+  geom_rug(data = house_data, aes(x = sqft_living),
+           sides = "b", alpha = 0.4, inherit.aes = FALSE) +
+  labs(title = "PDP: sqft_living vs Predicted House Price",
+       x = "Interior living area (sq ft)",
+       y = "Predicted price (USD)") +
+  theme_bw(base_size = 12)
+```
+
+## 3.5 PDP: Floors
+
+```{r house-pdp-floors, cache=TRUE, fig.cap="Figure 9. Partial dependence of predicted house price on the number of floors."}
+pd_floors <- partial(rf_house, pred.var = "floors",
+                     train = house_data, progress = FALSE)
+
+ggplot(pd_floors, aes(x = floors, y = yhat)) +
+  geom_line(colour = "#7b2d8b", linewidth = 1) +
+  geom_rug(data = house_data, aes(x = floors),
+           sides = "b", alpha = 0.4, inherit.aes = FALSE) +
+  labs(title = "PDP: Floors vs Predicted House Price",
+       x = "Number of floors",
+       y = "Predicted price (USD)") +
+  theme_bw(base_size = 12)
+```
+
+## 3.6 Interpretation
+
+**QUESTION: Analyse the influence of bedrooms, bathrooms, sqft_living and floors on the predicted price.**
+
+**bedrooms:** The PDP for bedrooms shows a non-monotone relationship. Predicted prices generally increase as the number of bedrooms rises from 1 to about 4, where the typical family home reaches its peak. However, beyond 4-5 bedrooms, the curve flattens or even declines slightly. This counter-intuitive pattern arises because very high bedroom counts in this dataset tend to correspond to older or lower-quality properties where many small rooms replace fewer larger ones. The random forest captures this pattern by averaging over all other features: a house with 8 bedrooms does not necessarily predict a higher price because sqft_living and grade (not included here) would also need to be large to justify it. The rug marks confirm that most observations are concentrated at 3-5 bedrooms, so predictions at the extremes are based on fewer data points and carry more uncertainty.
+
+**bathrooms:** Bathrooms show a clearer positive relationship than bedrooms. As the number of bathrooms increases from 1 to about 3.5, predicted prices rise substantially - adding a bathroom to a home correlates strongly with higher market value. This reflects the fact that bathrooms are expensive to add and are typically found in larger, higher-quality homes. Beyond 4 bathrooms, the curve tends to flatten because very high bathroom counts are associated with large luxury properties where the marginal value of an additional bathroom diminishes. Unlike bedrooms, there is no reversal; the relationship is essentially monotonically positive.
+
+**sqft_living:** Interior living area has the strongest and most consistent positive effect on predicted price. The PDP shows a steep rise from around 500 to 3,000 square feet, where each additional hundred square feet adds significant value. The relationship is roughly concave: the first additional square footage is most valuable (expanding a tiny home is very impactful), while going from an already large home to an extremely large one adds progressively less to the predicted price per unit. The rug marks show that most homes lie between 1,000 and 3,500 square feet, which is where the model has the most reliable estimates. Very large homes (above 5,000 square feet) are rare in the sample, so PDP estimates at those extremes should be interpreted with caution.
+
+**floors:** The number of floors shows a moderate positive effect up to about 2 stories. Single-story homes have the lowest predicted prices in this dimension, two-story homes predict somewhat higher values, and 2.5-story configurations are often the highest. This is consistent with the premium buyers place on two-story homes in suburban markets, which tend to offer more living space on smaller lots. At 3 or more stories, the predicted price may plateau or show more variability, partly because multi-story homes in this Seattle-area dataset are less common and include both urban town houses and larger estate properties. The step-like nature of the PDP reflects the fact that floors is effectively a discrete variable in this dataset.
+
+---
+
+# Conclusions
+
+The three exercises in this report demonstrate the practical value of Partial Dependence Plots for understanding how individual features and their combinations influence model predictions.
+
+In the bike sharing application, the PDPs confirm and quantify the relationships that domain knowledge would suggest: bike demand grows with time (system maturity), increases with temperature up to a comfortable plateau, decreases with humidity, and declines with wind speed. The two-dimensional PDP adds a layer of insight by showing that the detrimental effect of high humidity is amplified at high temperatures, producing a discomfort interaction that neither variable alone can reveal.
+
+In the house price application, sqft_living emerges as the dominant driver of predicted price, with a strong and consistent positive effect. Bathrooms show a steady positive relationship, while bedrooms exhibit a peak-and-decline pattern that reflects the mix of property types in the dataset. Floors contribute positively up to two stories, with diminishing returns beyond that.
+
+PDPs are a powerful tool precisely because they isolate the average marginal effect of one or two features while holding others fixed at their observed values. Their main limitation is that they assume feature independence, which can be misleading when predictors are correlated. In both datasets examined here, some correlations exist (e.g., temperature and season in the bike data, sqft_living and bedrooms in the house data), so the PDP curves should be interpreted as average conditional effects rather than strict causal relationships.

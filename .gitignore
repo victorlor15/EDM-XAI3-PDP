@@ -1,0 +1,13 @@
+# R artifacts
+.Rhistory
+.RData
+.Rproj.user/
+*_cache/
+*_files/
+
+# Large data files (keep CSVs tracked since they are required)
+# Uncomment below if CSVs are too large for GitHub:
+# *.csv
+
+# Generated output (keep the docx tracked for submission)
+# XAI3_report.docx
